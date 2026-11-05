@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getPageAspect, openPdfFromBlob } from '../services/pdfDocument'
+import { getDominantPageAspect, openPdfFromBlob } from '../services/pdfDocument'
 
 export function usePdfDocument(blob) {
   const [pdf, setPdf] = useState(null)
@@ -24,6 +24,7 @@ export function usePdfDocument(blob) {
       setStatus('loading')
       setError(null)
       setPdf(null)
+      setPageCount(0)
 
       try {
         const doc = await openPdfFromBlob(blob)
@@ -33,7 +34,16 @@ export function usePdfDocument(blob) {
         }
 
         documentRef = doc
-        const size = await getPageAspect(doc, 1)
+
+        if (!doc.numPages) {
+          await doc.destroy()
+          documentRef = null
+          setStatus('error')
+          setError('This PDF has no pages to display.')
+          return
+        }
+
+        const size = await getDominantPageAspect(doc)
         if (cancelled) {
           await doc.destroy()
           return
