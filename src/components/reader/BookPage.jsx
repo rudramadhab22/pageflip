@@ -3,7 +3,6 @@ import { usePdfReader } from '../../context/PdfReaderContext'
 import { getCachedPageImage, setCachedPageImage } from '../../services/pageImageCache'
 import { renderPageToDataUrl } from '../../services/pdfDocument'
 import { enqueueRender } from '../../services/renderQueue'
-import { Spinner } from '../ui/Spinner'
 
 /** Cover face content — parent must be a native <div> for react-pageflip refs. */
 export function HardCoverContent({ title, subtitle, side = 'front' }) {
@@ -34,17 +33,21 @@ export function HardCoverContent({ title, subtitle, side = 'front' }) {
 export function PdfPageContent({ pageNumber }) {
   const { pdf, cssWidth, absolutePage, bookId, renderProfile } = usePdfReader()
   const imgRef = useRef(null)
-  const [imageUrl, setImageUrl] = useState(null)
-  const [isRendering, setIsRendering] = useState(false)
+  const [imageUrl, setImageUrl] = useState(() =>
+    getCachedPageImage(bookId, pageNumber, cssWidth),
+  )
   const [failed, setFailed] = useState(false)
 
   const radius = renderProfile?.radius ?? 5
   const near = Math.abs(pageNumber - (absolutePage || 1)) <= radius || pageNumber <= 6
 
   useEffect(() => {
+    // Keep the previous bitmap visible while a new width is rendering (prevents light blink).
     const cached = getCachedPageImage(bookId, pageNumber, cssWidth)
-    setImageUrl(cached)
-    if (cached && imgRef.current) imgRef.current.src = cached
+    if (cached) {
+      setImageUrl(cached)
+      if (imgRef.current) imgRef.current.src = cached
+    }
     setFailed(false)
   }, [bookId, pageNumber, cssWidth])
 
@@ -59,9 +62,6 @@ export function PdfPageContent({ pageNumber }) {
     }
 
     let cancelled = false
-    setIsRendering(true)
-    setFailed(false)
-
     const distance = Math.abs(pageNumber - (absolutePage || 1))
 
     enqueueRender(
@@ -83,9 +83,6 @@ export function PdfPageContent({ pageNumber }) {
         if (cancelled || error?.message === 'Render cancelled') return
         setFailed(true)
       })
-      .finally(() => {
-        if (!cancelled) setIsRendering(false)
-      })
 
     return () => {
       cancelled = true
@@ -96,26 +93,31 @@ export function PdfPageContent({ pageNumber }) {
     <>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.05),transparent_14px,transparent_calc(100%-12px),rgba(0,0,0,0.03))]"
+        className="pointer-events-none absolute inset-0 bg-paper"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.04),transparent_14px,transparent_calc(100%-12px),rgba(0,0,0,0.025))]"
       />
 
-      <img
-        ref={imgRef}
-        src={imageUrl || undefined}
-        alt={`Page ${pageNumber}`}
-        draggable={false}
-        className={`relative h-full w-full object-contain select-none ${imageUrl ? 'opacity-100' : 'opacity-0'}`}
-      />
-
-      {!imageUrl ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-ink-700">
-          {isRendering ? <Spinner label={`Rendering page ${pageNumber}`} /> : null}
-          <p className="font-display text-2xl text-ink-700/35">{pageNumber}</p>
-          <p className="text-xs tracking-wide text-ink-700/30 uppercase">
-            {failed ? 'Couldn’t print this page' : isRendering ? 'Printing page…' : 'Paper ready'}
-          </p>
+      {imageUrl ? (
+        <img
+          ref={imgRef}
+          src={imageUrl}
+          alt={`Page ${pageNumber}`}
+          draggable={false}
+          className="relative h-full w-full object-contain select-none"
+        />
+      ) : (
+        // Quiet paper — no page numbers (they were flashing through the spine).
+        <div className="absolute inset-0 bg-paper" aria-hidden>
+          {failed ? (
+            <p className="absolute inset-x-0 bottom-6 text-center text-xs text-ink-700/40">
+              Couldn’t print this page
+            </p>
+          ) : null}
         </div>
-      ) : null}
+      )}
     </>
   )
 }

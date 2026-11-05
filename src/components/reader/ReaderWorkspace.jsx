@@ -9,7 +9,7 @@ import { useElementSize } from '../../hooks/useElementSize'
 import { useFlipControls } from '../../hooks/useFlipControls'
 import { useFullscreen } from '../../hooks/useFullscreen'
 import { usePdfDocument } from '../../hooks/usePdfDocument'
-import { computeBookPageSize } from '../../lib/pageSize'
+import { computeBookPageSize, computeFitScale } from '../../lib/pageSize'
 import {
   absolutePageToFlipIndex,
   computePageWindow,
@@ -47,7 +47,7 @@ export function ReaderWorkspace({
   const flipIndexRef = useRef(0)
 
   const stageSize = useElementSize(stageRef)
-  const debouncedStage = useDebouncedValue(stageSize, 220)
+  const debouncedStage = useDebouncedValue(stageSize, 120)
   const { pdf, pageCount, aspect, status, error } = usePdfDocument(blob)
   const { enter: enterFs, exit: exitFs } = useFullscreen(rootRef)
   const { bookmarks, toggleBookmark, remove, isBookmarked } = useBookmarks(bookId)
@@ -95,6 +95,17 @@ export function ReaderWorkspace({
     }
   }, [expanded])
 
+  // Intrinsic flip-engine size stays stable across expand (no remount blink).
+  const { pageWidth, pageHeight } = useMemo(
+    () =>
+      computeBookPageSize({
+        aspect,
+        zoom,
+        viewMode,
+      }),
+    [aspect, zoom, viewMode],
+  )
+
   const layoutWidth = expanded
     ? viewport.width
     : debouncedStage.width || stageSize.width || viewport.width * 0.9
@@ -102,17 +113,17 @@ export function ReaderWorkspace({
     ? viewport.height
     : debouncedStage.height || stageSize.height || viewport.height * 0.7
 
-  const { pageWidth, pageHeight } = useMemo(
+  const fitScale = useMemo(
     () =>
-      computeBookPageSize({
+      computeFitScale({
         containerWidth: layoutWidth,
         containerHeight: layoutHeight,
-        aspect,
-        zoom,
+        pageWidth,
+        pageHeight,
         viewMode,
         expanded,
       }),
-    [layoutWidth, layoutHeight, aspect, zoom, viewMode, expanded],
+    [layoutWidth, layoutHeight, pageWidth, pageHeight, viewMode, expanded],
   )
 
   const renderProfile = useMemo(
@@ -465,6 +476,7 @@ export function ReaderWorkspace({
               startPage={startPage}
               windowed={windowMeta.windowed}
               viewMode={viewMode}
+              fitScale={fitScale}
               immersive={expanded}
               flipBookRef={flipBookRef}
               onFlip={onFlip}

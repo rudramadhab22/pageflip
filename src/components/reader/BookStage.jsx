@@ -5,8 +5,8 @@ import { HardCoverContent, PdfPageContent } from './BookPage'
 
 /**
  * Hardcover flip stage.
- * - Native <div> children (React 19 + react-pageflip ref requirement)
- * - Memoized children so page-flip does not wipe refs on every parent render
+ * Size is fixed for the engine; parent applies CSS scale to fit the viewport
+ * so expand/resize does not remount (avoids black/white blinking).
  */
 export function BookStage({
   bookId,
@@ -18,6 +18,7 @@ export function BookStage({
   startPage = 0,
   windowed = false,
   viewMode = 'spread',
+  fitScale = 1,
   flipBookRef,
   onFlip,
   onInit,
@@ -40,7 +41,9 @@ export function BookStage({
     [flipBookRef],
   )
 
-  const bookKey = `${bookId}:${viewMode}:${pageList[0] || 0}:${pageList.length}:${pageWidth}x${pageHeight}`
+  // Remount only when the logical book changes — never on expand/resize.
+  const bookKey = `${bookId}:${viewMode}:${pageList[0] || 0}:${pageList.length}:${pageWidth}`
+
   const shellWidth = single ? pageWidth + thickness + 12 : pageWidth * 2 + thickness + 16
   const bookWidth = single ? pageWidth : pageWidth * 2
 
@@ -93,86 +96,100 @@ export function BookStage({
   }, [pageList, title, windowed, pageCount])
 
   return (
-    <div className={`book-stage relative mx-auto w-full ${immersive ? 'max-w-none' : 'max-w-6xl'}`}>
-      <div className="relative mx-auto" style={{ width: shellWidth, maxWidth: '100%' }}>
-        <div
-          aria-hidden
-          className={`pointer-events-none absolute top-[2.5%] bottom-[2.5%] rounded-sm ${
-            single ? 'left-0' : 'right-0'
-          }`}
-          style={{
-            width: thickness,
-            background: single
-              ? `linear-gradient(90deg, ${palette.spine}, #cfc4b4 40%, #f3ebe0 78%, #e7ddd0)`
-              : `linear-gradient(90deg, ${palette.spine}, #d9cfc0 35%, #f3ebe0 70%, #cfc4b4)`,
-            boxShadow: '4px 10px 22px rgba(0,0,0,0.35)',
-          }}
-        />
-
-        {single ? (
+    <div
+      className={`book-stage relative mx-auto flex items-center justify-center ${
+        immersive ? 'h-full w-full max-w-none' : 'w-full max-w-6xl'
+      }`}
+    >
+      <div
+        className="book-stage__scaler"
+        style={{
+          width: shellWidth,
+          height: pageHeight,
+          transform: `scale(${fitScale})`,
+          transformOrigin: 'center center',
+          willChange: 'transform',
+        }}
+      >
+        <div className="relative" style={{ width: shellWidth, height: pageHeight }}>
           <div
             aria-hidden
-            className="pointer-events-none absolute top-[5%] bottom-[5%] left-0 z-[1] w-[38%]"
+            className={`pointer-events-none absolute top-[2.5%] bottom-[2.5%] rounded-sm ${
+              single ? 'left-0' : 'right-0'
+            }`}
             style={{
-              background: `linear-gradient(105deg, ${palette.from} 0%, ${palette.to} 55%, ${palette.spine})`,
-              transform: 'perspective(900px) rotateY(-72deg)',
-              transformOrigin: 'left center',
-              boxShadow: '8px 10px 24px rgba(0,0,0,0.4)',
+              width: thickness,
+              background: single
+                ? `linear-gradient(90deg, ${palette.spine}, #cfc4b4 40%, #f3ebe0 78%, #e7ddd0)`
+                : `linear-gradient(90deg, ${palette.spine}, #d9cfc0 35%, #f3ebe0 70%, #cfc4b4)`,
+              boxShadow: '4px 10px 22px rgba(0,0,0,0.35)',
             }}
           />
-        ) : (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute top-[2%] bottom-[2%] left-1/2 z-0 w-2.5 -translate-x-1/2 rounded-sm"
-            style={{
-              background: `linear-gradient(180deg, ${palette.from}, ${palette.spine}, ${palette.to})`,
-              boxShadow: '0 10px 24px rgba(0,0,0,0.4)',
-            }}
-          />
-        )}
 
-        <div
-          className="relative z-10 mx-auto"
-          style={{
-            width: bookWidth,
-            maxWidth: '100%',
-            marginLeft: single ? thickness + 2 : 0,
-            filter: 'drop-shadow(0 24px 36px rgba(0,0,0,0.5))',
-          }}
-        >
-          <HTMLFlipBook
-            key={bookKey}
-            ref={setBookRef}
-            width={pageWidth}
-            height={pageHeight}
-            size="fixed"
-            minWidth={pageWidth}
-            maxWidth={pageWidth}
-            minHeight={pageHeight}
-            maxHeight={pageHeight}
-            startPage={startPage}
-            drawShadow
-            flippingTime={800}
-            usePortrait={single}
-            startZIndex={2}
-            autoSize={false}
-            maxShadowOpacity={0.65}
-            showCover
-            showPageCorners
-            mobileScrollSupport
-            swipeDistance={12}
-            clickEventForward={false}
-            useMouseEvents
-            disableFlipByClick={false}
-            renderOnlyPageLengthChange
-            className={`pageflip-book ${single ? 'pageflip-book--single' : 'pageflip-book--spread'}`}
-            style={{ margin: '0 auto', width: bookWidth }}
-            onFlip={onFlip}
-            onInit={onInit}
-            onChangeOrientation={onChangeOrientation}
+          {single ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute top-[5%] bottom-[5%] left-0 z-[1] w-[38%]"
+              style={{
+                background: `linear-gradient(105deg, ${palette.from} 0%, ${palette.to} 55%, ${palette.spine})`,
+                transform: 'perspective(900px) rotateY(-72deg)',
+                transformOrigin: 'left center',
+                boxShadow: '8px 10px 24px rgba(0,0,0,0.4)',
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute top-[2%] bottom-[2%] left-1/2 z-0 w-2.5 -translate-x-1/2 rounded-sm"
+              style={{
+                background: `linear-gradient(180deg, ${palette.from}, ${palette.spine}, ${palette.to})`,
+                boxShadow: '0 10px 24px rgba(0,0,0,0.4)',
+              }}
+            />
+          )}
+
+          <div
+            className="relative z-10"
+            style={{
+              width: bookWidth,
+              marginLeft: single ? thickness + 2 : 0,
+              filter: 'drop-shadow(0 24px 36px rgba(0,0,0,0.5))',
+            }}
           >
-            {flipChildren}
-          </HTMLFlipBook>
+            <HTMLFlipBook
+              key={bookKey}
+              ref={setBookRef}
+              width={pageWidth}
+              height={pageHeight}
+              size="fixed"
+              minWidth={pageWidth}
+              maxWidth={pageWidth}
+              minHeight={pageHeight}
+              maxHeight={pageHeight}
+              startPage={startPage}
+              drawShadow
+              flippingTime={750}
+              usePortrait={single}
+              startZIndex={2}
+              autoSize={false}
+              maxShadowOpacity={0.45}
+              showCover
+              showPageCorners={false}
+              mobileScrollSupport
+              swipeDistance={12}
+              clickEventForward={false}
+              useMouseEvents
+              disableFlipByClick={false}
+              renderOnlyPageLengthChange
+              className={`pageflip-book ${single ? 'pageflip-book--single' : 'pageflip-book--spread'}`}
+              style={{ margin: '0 auto', width: bookWidth }}
+              onFlip={onFlip}
+              onInit={onInit}
+              onChangeOrientation={onChangeOrientation}
+            >
+              {flipChildren}
+            </HTMLFlipBook>
+          </div>
         </div>
       </div>
     </div>

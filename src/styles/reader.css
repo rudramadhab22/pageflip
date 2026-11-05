@@ -41,6 +41,21 @@
   pointer-events: auto;
 }
 
+.book-stage__scaler {
+  /* Smooth expand/resize without remounting the flip engine (stops light blink). */
+  transition: transform 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-stage__scaler {
+    transition: none;
+  }
+}
+
+.book-page--paper {
+  background-color: #f3ebe0 !important;
+}
+
 .reader-workspace {
   isolation: isolate;
 }
