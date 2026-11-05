@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, Minimize2 } from 'lucide-react'
 import { PdfReaderProvider } from '../../context/PdfReaderContext'
 import { LARGE_PAGE_COUNT_WARN } from '../../lib/constants'
 import { useBookmarks } from '../../hooks/useBookmarks'
@@ -9,6 +9,7 @@ import { useElementSize } from '../../hooks/useElementSize'
 import { useFlipControls } from '../../hooks/useFlipControls'
 import { useFullscreen } from '../../hooks/useFullscreen'
 import { usePdfDocument } from '../../hooks/usePdfDocument'
+import { computeBookPageSize, computeFitScale } from '../../lib/pageSize'
 import {
   absolutePageToFlipIndex,
   computePageWindow,
@@ -27,54 +28,28 @@ import { ReaderNotice } from './ReaderNotice'
 import { ReaderToolbar } from './ReaderToolbar'
 import { ReadingProgressBar } from './ReadingProgressBar'
 
-const ZOOM_STEPS = [0.7, 0.85, 1, 1.15, 1.35]
+const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3]
 
-function computePageSize(containerWidth, containerHeight, aspect, zoom, compact) {
-  const safeAspect = aspect > 0 ? aspect : 210 / 297
-  const horizontalBudget = Math.max(260, containerWidth - (compact ? 16 : 48))
-  const verticalBudget = Math.max(320, containerHeight - (compact ? 12 : 24))
-
-  let pageWidth = Math.min(compact ? 360 : 460, Math.floor(horizontalBudget / (compact ? 1.05 : 2.08)))
-  let pageHeight = Math.floor(pageWidth / safeAspect)
-
-  if (!compact) {
-    // Landscape spread: two pages side by side.
-    pageWidth = Math.min(460, Math.floor(horizontalBudget / 2.08))
-    pageHeight = Math.floor(pageWidth / safeAspect)
-  }
-
-  if (pageHeight > verticalBudget) {
-    pageHeight = Math.floor(verticalBudget)
-    pageWidth = Math.floor(pageHeight * safeAspect)
-  }
-
-  if (compact) {
-    pageWidth = Math.min(pageWidth, Math.floor(containerWidth - 24))
-    pageHeight = Math.floor(pageWidth / safeAspect)
-    if (pageHeight > verticalBudget) {
-      pageHeight = Math.floor(verticalBudget)
-      pageWidth = Math.floor(pageHeight * safeAspect)
-    }
-  }
-
-  pageWidth = Math.max(140, Math.round(pageWidth * zoom))
-  pageHeight = Math.max(200, Math.round(pageHeight * zoom))
-
-  return { pageWidth, pageHeight }
-}
-
-export function ReaderWorkspace({ bookId, blob, title }) {
+export function ReaderWorkspace({
+  bookId,
+  blob,
+  title,
+  immersive = false,
+  onImmersiveChange,
+}) {
+  const navigate = useNavigate()
   const rootRef = useRef(null)
   const stageRef = useRef(null)
   const flipBookRef = useRef(null)
   const restoredRef = useRef(false)
   const pendingJumpRef = useRef(null)
   const windowMetaRef = useRef(null)
+  const flipIndexRef = useRef(0)
 
   const stageSize = useElementSize(stageRef)
-  const debouncedSize = useDebouncedValue(stageSize, 160)
+  const debouncedStage = useDebouncedValue(stageSize, 120)
   const { pdf, pageCount, aspect, status, error } = usePdfDocument(blob)
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootRef)
+  const { enter: enterFs, exit: exitFs } = useFullscreen(rootRef)
   const { bookmarks, toggleBookmark, remove, isBookmarked } = useBookmarks(bookId)
 
   const [flipIndex, setFlipIndex] = useState(0)
@@ -83,10 +58,15 @@ export function ReaderWorkspace({ bookId, blob, title }) {
   const [orientation, setOrientation] = useState('landscape')
   const [zoomIndex, setZoomIndex] = useState(2)
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
+  const [viewMode, setViewMode] = useState('spread')
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800,
+  }))
 
+  const expanded = Boolean(immersive)
   const zoom = ZOOM_STEPS[zoomIndex]
   const zoomLabel = `${Math.round(zoom * 100)}%`
-  const compact = (debouncedSize.width || stageSize.width || 960) < 720
 
   const windowMeta = useMemo(
     () => computePageWindow(pageCount || 0, windowAnchor),
@@ -99,30 +79,67 @@ export function ReaderWorkspace({ bookId, blob, title }) {
     windowMeta.pages.length,
   )
 
-  const sizeSource = debouncedSize.width ? debouncedSize : stageSize
+  useEffect(() => {
+    const onResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
+    if (!expanded) return undefined
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    setViewport({ width: window.innerWidth, height: window.innerHeight })
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [expanded])
+
+  // Intrinsic flip-engine size stays stable across expand (no remount blink).
   const { pageWidth, pageHeight } = useMemo(
     () =>
-      computePageSize(
-        sizeSource.width || 960,
-        sizeSource.height || 700,
+      computeBookPageSize({
         aspect,
         zoom,
-        compact,
-      ),
-    [sizeSource.width, sizeSource.height, aspect, zoom, compact],
+        viewMode,
+      }),
+    [aspect, zoom, viewMode],
   )
 
+  const layoutWidth = expanded
+    ? viewport.width
+    : debouncedStage.width || stageSize.width || viewport.width * 0.9
+  const layoutHeight = expanded
+    ? viewport.height
+    : debouncedStage.height || stageSize.height || viewport.height * 0.7
+
+  const fitScale = useMemo(
+    () =>
+      computeFitScale({
+        containerWidth: layoutWidth,
+        containerHeight: layoutHeight,
+        pageWidth,
+        pageHeight,
+        viewMode,
+        expanded,
+      }),
+    [layoutWidth, layoutHeight, pageWidth, pageHeight, viewMode, expanded],
+  )
+
+  // Over-render for CSS fitScale so glyphs stay sharp when the book is enlarged.
   const renderProfile = useMemo(() => {
-    const large = pageCount > LARGE_PAGE_COUNT_WARN
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+    const upscale = Math.max(1, Math.round(fitScale * 20) / 20)
     return {
-      radius: large ? 2 : windowMeta.windowed ? 3 : 4,
-      pixelRatio: compact ? 1 : Math.min(1.75, window.devicePixelRatio || 1),
-      quality: large || compact ? 0.82 : 0.9,
+      radius: pageCount > LARGE_PAGE_COUNT_WARN ? 3 : 5,
+      // Slight extra headroom (1.15) beyond screen DPR × display scale.
+      pixelRatio: Math.min(4, Math.max(2, dpr * upscale * 1.15)),
+      quality: 0.98,
+      format: 'png',
     }
-  }, [pageCount, windowMeta.windowed, compact])
+  }, [pageCount, fitScale])
 
   const percent = readingPercent(absolutePage, pageCount)
-  // Cover / back labels: use flip index when on covers.
   const displayLabel =
     flipIndex <= 0
       ? 'Cover'
@@ -130,7 +147,7 @@ export function ReaderWorkspace({ bookId, blob, title }) {
         ? windowMeta.end >= pageCount
           ? 'Back cover'
           : `Loading pages ${windowMeta.end + 1}+…`
-        : orientation === 'landscape' && !compact
+        : viewMode === 'spread' && orientation === 'landscape'
           ? describeFlipPosition(absolutePage, pageCount, 'landscape')
           : `Page ${absolutePage}`
 
@@ -138,11 +155,32 @@ export function ReaderWorkspace({ bookId, blob, title }) {
   const canNext = !(flipIndex >= windowMeta.pages.length + 1 && windowMeta.end >= pageCount)
   const bookmarked = isBookmarked(absolutePage)
 
+  const exitExpand = useCallback(async () => {
+    onImmersiveChange?.(false)
+    await exitFs()
+  }, [onImmersiveChange, exitFs])
+
+  const enterExpand = useCallback(async () => {
+    onImmersiveChange?.(true)
+    await enterFs()
+  }, [onImmersiveChange, enterFs])
+
+  const toggleExpand = useCallback(async () => {
+    if (expanded) await exitExpand()
+    else await enterExpand()
+  }, [expanded, exitExpand, enterExpand])
+
+  const goLibrary = useCallback(async () => {
+    await exitExpand()
+    navigate('/')
+  }, [navigate, exitExpand])
+
   useEffect(() => {
     clearPageImageCache(bookId)
     clearRenderQueue()
     restoredRef.current = false
     pendingJumpRef.current = null
+    flipIndexRef.current = 0
     setWindowAnchor(1)
     setAbsolutePage(1)
     setFlipIndex(0)
@@ -209,6 +247,7 @@ export function ReaderWorkspace({ bookId, blob, title }) {
   const onFlip = useCallback(
     (event) => {
       const relative = typeof event?.data === 'number' ? event.data : 0
+      flipIndexRef.current = relative
       setFlipIndex(relative)
       syncAbsoluteFromFlip(relative)
     },
@@ -218,6 +257,7 @@ export function ReaderWorkspace({ bookId, blob, title }) {
   const onInit = useCallback(
     (event) => {
       const relative = typeof event?.data?.page === 'number' ? event.data.page : 0
+      flipIndexRef.current = relative
       setFlipIndex(relative)
       if (event?.data?.mode) setOrientation(event.data.mode)
       syncAbsoluteFromFlip(relative)
@@ -226,14 +266,12 @@ export function ReaderWorkspace({ bookId, blob, title }) {
       if (pending) {
         pendingJumpRef.current = null
         const meta = windowMetaRef.current
-        const index = absolutePageToFlipIndex(
-          pending.page,
-          meta.start,
-          meta.pages.length,
-        )
+        const index = absolutePageToFlipIndex(pending.page, meta.start, meta.pages.length)
         requestAnimationFrame(() => {
           goToFlipIndex(index, { animate: false })
           setAbsolutePage(pending.page)
+          flipIndexRef.current = index
+          setFlipIndex(index)
         })
         return
       }
@@ -294,12 +332,18 @@ export function ReaderWorkspace({ bookId, blob, title }) {
       } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
         event.preventDefault()
         onPrev()
+      } else if (event.key === 'Escape' && expanded) {
+        event.preventDefault()
+        exitExpand()
       } else if (event.key === 'f' || event.key === 'F') {
         event.preventDefault()
-        toggleFullscreen()
+        toggleExpand()
       } else if (event.key === 'b' || event.key === 'B') {
         event.preventDefault()
         onToggleBookmark()
+      } else if (event.key === 's' || event.key === 'S') {
+        event.preventDefault()
+        setViewMode((mode) => (mode === 'single' ? 'spread' : 'single'))
       } else if (event.key === '+' || event.key === '=') {
         event.preventDefault()
         onZoomIn()
@@ -311,73 +355,96 @@ export function ReaderWorkspace({ bookId, blob, title }) {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onNext, onPrev, toggleFullscreen, onToggleBookmark, onZoomIn, onZoomOut])
+  }, [onNext, onPrev, toggleExpand, exitExpand, onToggleBookmark, onZoomIn, onZoomOut, expanded])
 
   const largeNotice =
-    pageCount >= LARGE_PAGE_COUNT_WARN
-      ? `Large document (${pageCount} pages). PageFlip loads a moving window of pages and renders nearby sheets progressively.`
-      : windowMeta.windowed
-        ? `Showing pages ${windowMeta.start}–${windowMeta.end} of ${pageCount}. The window advances as you read.`
+    !expanded && pageCount >= LARGE_PAGE_COUNT_WARN
+      ? `Large document (${pageCount} pages). Nearby pages render progressively.`
+      : !expanded && windowMeta.windowed
+        ? `Showing pages ${windowMeta.start}–${windowMeta.end} of ${pageCount}.`
         : null
+
+  // Preserve place across intentional remounts (zoom / view / size bucket).
+  const startPage = flipIndexRef.current
+
+  const bookReady = status === 'ready' && pageCount > 0 && pdf && pageWidth > 0 && pageHeight > 0
 
   return (
     <div
       ref={rootRef}
-      className={`reader-workspace flex min-h-[calc(100dvh-5.5rem)] flex-col ${
-        isFullscreen ? 'min-h-dvh bg-ink-950 p-3 sm:p-6' : ''
+      className={`reader-workspace relative flex flex-col ${
+        expanded ? 'is-expanded' : 'min-h-[calc(100dvh-5.5rem)]'
       }`}
     >
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3 sm:mb-4">
-        <div className="min-w-0">
-          {!isFullscreen ? (
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 text-sm text-ink-300 transition hover:text-gilt-bright"
-            >
-              <ArrowLeft className="size-4" />
-              Library
-            </Link>
+      {!expanded ? (
+        <>
+          <div className="relative z-[70] mb-3 flex flex-wrap items-end justify-between gap-3 sm:mb-4">
+            <div className="min-w-0">
+              <button
+                type="button"
+                onClick={goLibrary}
+                className="relative z-[71] inline-flex items-center gap-2 text-sm text-ink-300 transition hover:text-gilt-bright"
+              >
+                <ArrowLeft className="size-4" />
+                Library
+              </button>
+              <h1 className="mt-2 truncate font-display text-2xl text-ink-100 sm:text-3xl">
+                {title || 'Untitled book'}
+              </h1>
+            </div>
+
+            <div className="w-full max-w-xs sm:w-56">
+              <ReadingProgressBar percent={percent} label={`${displayLabel} · ${percent}%`} />
+            </div>
+          </div>
+
+          <ReaderNotice>{largeNotice}</ReaderNotice>
+
+          {status === 'ready' && pageCount > 0 ? (
+            <div className="relative z-[70] mb-3">
+              <ReaderToolbar
+                pageCount={pageCount}
+                currentPdfPage={absolutePage}
+                canPrev={canPrev}
+                canNext={canNext}
+                zoom={zoomIndex}
+                zoomLabel={zoomLabel}
+                isFullscreen={expanded}
+                isBookmarked={bookmarked}
+                bookmarksOpen={bookmarksOpen}
+                bookmarkCount={bookmarks.length}
+                viewMode={viewMode}
+                onPrev={onPrev}
+                onNext={onNext}
+                onGoToPage={(page) => jumpToAbsolutePage(page, { animate: true })}
+                onZoomIn={onZoomIn}
+                onZoomOut={onZoomOut}
+                onToggleFullscreen={toggleExpand}
+                onToggleBookmark={onToggleBookmark}
+                onToggleBookmarksPanel={() => setBookmarksOpen((open) => !open)}
+                onViewModeChange={setViewMode}
+              />
+            </div>
           ) : null}
-          <h1 className="mt-2 truncate font-display text-2xl text-ink-100 sm:text-3xl">
-            {title || 'Untitled book'}
-          </h1>
-        </div>
-
-        <div className="w-full max-w-xs sm:w-56">
-          <ReadingProgressBar percent={percent} label={`${displayLabel} · ${percent}%`} />
-        </div>
-      </div>
-
-      <ReaderNotice>{largeNotice}</ReaderNotice>
-
-      {status === 'ready' && pageCount > 0 ? (
-        <div className="mb-3">
-          <ReaderToolbar
-            pageCount={pageCount}
-            currentPdfPage={absolutePage}
-            canPrev={canPrev}
-            canNext={canNext}
-            zoom={zoomIndex}
-            zoomLabel={zoomLabel}
-            isFullscreen={isFullscreen}
-            isBookmarked={bookmarked}
-            bookmarksOpen={bookmarksOpen}
-            bookmarkCount={bookmarks.length}
-            onPrev={onPrev}
-            onNext={onNext}
-            onGoToPage={(page) => jumpToAbsolutePage(page, { animate: true })}
-            onZoomIn={onZoomIn}
-            onZoomOut={onZoomOut}
-            onToggleFullscreen={toggleFullscreen}
-            onToggleBookmark={onToggleBookmark}
-            onToggleBookmarksPanel={() => setBookmarksOpen((open) => !open)}
-          />
-        </div>
-      ) : null}
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={exitExpand}
+          className="absolute top-4 right-4 z-[120] inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/55 px-3 py-2 text-sm text-ink-100 backdrop-blur-md transition hover:border-gilt/40 hover:text-gilt-bright"
+        >
+          <Minimize2 className="size-4" />
+          Exit
+        </button>
+      )}
 
       <div
         ref={stageRef}
-        className="relative flex min-h-[50dvh] flex-1 items-center justify-center overflow-hidden rounded-[1.25rem] border border-white/6 bg-ink-950/40 px-2 py-4 sm:min-h-[55dvh] sm:rounded-[1.5rem] sm:px-6 sm:py-6"
+        className={`relative z-10 flex flex-1 items-center justify-center overflow-hidden ${
+          expanded
+            ? 'h-full min-h-0 w-full px-3 py-3 sm:px-5 sm:py-5'
+            : 'min-h-[58dvh] rounded-[1.25rem] border border-white/6 bg-ink-950/40 px-2 py-4 sm:min-h-[62dvh] sm:rounded-[1.5rem] sm:px-6 sm:py-6'
+        }`}
       >
         {status === 'loading' ? (
           <div className="flex flex-col items-center gap-3 text-ink-300">
@@ -392,7 +459,7 @@ export function ReaderWorkspace({ bookId, blob, title }) {
           </div>
         ) : null}
 
-        {status === 'ready' && pageCount > 0 && pdf ? (
+        {bookReady ? (
           <PdfReaderProvider
             pdf={pdf}
             pageCount={pageCount}
@@ -410,9 +477,11 @@ export function ReaderWorkspace({ bookId, blob, title }) {
               pageCount={pageCount}
               pageWidth={pageWidth}
               pageHeight={pageHeight}
-              startPage={flipIndex}
+              startPage={startPage}
               windowed={windowMeta.windowed}
-              compactChrome={compact}
+              viewMode={viewMode}
+              fitScale={fitScale}
+              immersive={expanded}
               flipBookRef={flipBookRef}
               onFlip={onFlip}
               onInit={onInit}
@@ -421,23 +490,25 @@ export function ReaderWorkspace({ bookId, blob, title }) {
           </PdfReaderProvider>
         ) : null}
 
-        <BookmarksPanel
-          open={bookmarksOpen}
-          bookmarks={bookmarks}
-          onClose={() => setBookmarksOpen(false)}
-          onGoTo={(page) => {
-            jumpToAbsolutePage(page, { animate: true })
-            setBookmarksOpen(false)
-          }}
-          onRemove={remove}
-        />
+        {!expanded ? (
+          <BookmarksPanel
+            open={bookmarksOpen}
+            bookmarks={bookmarks}
+            onClose={() => setBookmarksOpen(false)}
+            onGoTo={(page) => {
+              jumpToAbsolutePage(page, { animate: true })
+              setBookmarksOpen(false)
+            }}
+            onRemove={remove}
+          />
+        ) : null}
       </div>
 
-      <p className="mt-3 text-center text-xs text-ink-500 sm:mt-4">
-        {compact
-          ? 'Swipe to turn · arrows navigate · tap toolbar for zoom & bookmarks'
-          : 'Drag corners to flip · arrows navigate · B bookmark · F fullscreen · +/- zoom'}
-      </p>
+      {!expanded ? (
+        <p className="relative z-[70] mt-3 text-center text-xs text-ink-500 sm:mt-4">
+          Drag a corner to turn pages · arrows navigate · S single/spread · F expand
+        </p>
+      ) : null}
     </div>
   )
 }

@@ -15,6 +15,7 @@ export function ReaderPage() {
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [record, setRecord] = useState(null)
+  const [immersive, setImmersive] = useState(false)
 
   const meta = recentBooks.find((book) => book.id === bookId) || null
   const title = meta?.title || stripPdfExtension(record?.name || meta?.name || '')
@@ -55,7 +56,7 @@ export function ReaderPage() {
   }, [bookId, refreshRecent])
 
   return (
-    <AppShell dense>
+    <AppShell dense hideChrome={immersive} fullBleed>
       {status === 'loading' ? (
         <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-3 text-ink-300">
           <Spinner label="Opening book" className="size-8" />
@@ -73,7 +74,13 @@ export function ReaderPage() {
       ) : null}
 
       {status === 'ready' ? (
-        <ReaderWorkspace bookId={bookId} blob={record.blob} title={title} />
+        <ReaderWorkspace
+          bookId={bookId}
+          blob={record.blob}
+          title={title}
+          immersive={immersive}
+          onImmersiveChange={setImmersive}
+        />
       ) : null}
     </AppShell>
   )

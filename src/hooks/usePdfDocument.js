@@ -29,14 +29,14 @@ export function usePdfDocument(blob) {
       try {
         const doc = await openPdfFromBlob(blob)
         if (cancelled) {
-          await doc.destroy()
+          await doc.destroy().catch(() => {})
           return
         }
 
         documentRef = doc
 
         if (!doc.numPages) {
-          await doc.destroy()
+          await doc.destroy().catch(() => {})
           documentRef = null
           setStatus('error')
           setError('This PDF has no pages to display.')
@@ -45,7 +45,8 @@ export function usePdfDocument(blob) {
 
         const size = await getDominantPageAspect(doc)
         if (cancelled) {
-          await doc.destroy()
+          await doc.destroy().catch(() => {})
+          documentRef = null
           return
         }
 
@@ -64,8 +65,13 @@ export function usePdfDocument(blob) {
 
     return () => {
       cancelled = true
-      if (documentRef) {
-        documentRef.destroy().catch(() => {})
+      const doc = documentRef
+      documentRef = null
+      if (doc) {
+        // Defer destroy so in-flight getPage calls can settle without racing setState.
+        queueMicrotask(() => {
+          doc.destroy().catch(() => {})
+        })
       }
     }
   }, [blob])

@@ -1,10 +1,12 @@
 import {
   Bookmark,
   BookmarkCheck,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   Maximize2,
   Minimize2,
+  Notebook,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
@@ -40,6 +42,7 @@ export function ReaderToolbar({
   isBookmarked,
   bookmarksOpen,
   bookmarkCount,
+  viewMode,
   onPrev,
   onNext,
   onGoToPage,
@@ -48,6 +51,8 @@ export function ReaderToolbar({
   onToggleFullscreen,
   onToggleBookmark,
   onToggleBookmarksPanel,
+  onViewModeChange,
+  compact = false,
 }) {
   const [draftPage, setDraftPage] = useState(String(currentPdfPage || 1))
 
@@ -66,7 +71,11 @@ export function ReaderToolbar({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-ink-900/80 p-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={`relative z-[70] flex flex-col gap-3 rounded-2xl border border-white/8 bg-ink-900/90 p-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between ${
+        compact ? 'pointer-events-auto' : ''
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <IconBtn label="Previous page" onClick={onPrev} disabled={!canPrev}>
           <ChevronLeft className="size-5" />
@@ -94,6 +103,21 @@ export function ReaderToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <IconBtn
+          label="Open book (two pages)"
+          onClick={() => onViewModeChange?.('spread')}
+          active={viewMode === 'spread'}
+        >
+          <BookOpen className="size-4" />
+        </IconBtn>
+        <IconBtn
+          label="Single folded page"
+          onClick={() => onViewModeChange?.('single')}
+          active={viewMode === 'single'}
+        >
+          <Notebook className="size-4" />
+        </IconBtn>
+
         <IconBtn label="Zoom out" onClick={onZoomOut} disabled={zoom <= 0}>
           <ZoomOut className="size-4" />
         </IconBtn>
@@ -128,7 +152,7 @@ export function ReaderToolbar({
         </IconBtn>
 
         <IconBtn
-          label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          label={isFullscreen ? 'Exit expand' : 'Expand book'}
           onClick={onToggleFullscreen}
           active={isFullscreen}
         >

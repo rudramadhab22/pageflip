@@ -12,6 +12,10 @@
   box-shadow: none !important;
 }
 
+.pageflip-book--single .stf__parent {
+  max-width: 100%;
+}
+
 .book-page {
   box-sizing: border-box;
   background-color: #f3ebe0;
@@ -26,18 +30,56 @@
   box-shadow: inset 0 0 28px rgba(80, 55, 30, 0.08);
 }
 
-.book-stage {
-  touch-action: pan-y;
+.book-page--paper img {
+  image-rendering: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
-.reader-workspace:fullscreen,
-.reader-workspace:-webkit-full-screen {
+.book-stage {
+  touch-action: pan-y;
+  pointer-events: auto;
+}
+
+.book-stage__scaler {
+  /* Smooth expand/resize without remounting the flip engine (stops light blink). */
+  transition: transform 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-stage__scaler {
+    transition: none;
+  }
+}
+
+.book-page--paper {
+  background-color: #f3ebe0 !important;
+}
+
+.reader-workspace {
+  isolation: isolate;
+}
+
+/* Reliable expand: CSS fullscreen shell (works even if Fullscreen API is blocked) */
+.reader-workspace.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #0a0c10;
+}
+
+.reader-workspace.is-expanded:fullscreen,
+.reader-workspace.is-expanded:-webkit-full-screen {
   width: 100%;
   height: 100%;
-  overflow: auto;
-  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
-    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
-  background: #07080b;
+  max-height: none;
+  background: #0a0c10;
 }
 
 @media (max-width: 719px) {

@@ -26,8 +26,8 @@ export const PAGE_WINDOW_SIZE = 40
 /** Near-edge threshold that shifts the sliding window. */
 export const PAGE_WINDOW_SHIFT_MARGIN = 4
 
-/** In-memory rendered page budget (LRU). */
-export const PAGE_IMAGE_CACHE_LIMIT = 28
+/** In-memory rendered page budget (LRU). Sharper PNGs are heavier — keep lean. */
+export const PAGE_IMAGE_CACHE_LIMIT = 20
 
 /** Concurrent PDF.js page renders. */
 export const PAGE_RENDER_CONCURRENCY = 2
