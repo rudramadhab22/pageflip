@@ -1,17 +1,7 @@
-import * as pdfjs from 'pdfjs-dist'
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-
-let workerConfigured = false
-
-export function ensurePdfWorker() {
-  if (workerConfigured) return
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-  workerConfigured = true
-}
+import { ensurePdfWorker, pdfjs } from './pdfWorker'
 
 /**
  * Lightweight metadata probe used on import.
- * Full progressive page rendering lands in Phase 2+.
  */
 export async function probePdfMetadata(data) {
   ensurePdfWorker()

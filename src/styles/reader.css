@@ -1,0 +1,37 @@
+/* StPageFlip / react-pageflip hardcover refinements */
+
+.pageflip-book {
+  margin-inline: auto;
+}
+
+.pageflip-book .stf__parent {
+  border-radius: 2px;
+}
+
+.pageflip-book .stf__block {
+  box-shadow: none !important;
+}
+
+.book-page {
+  box-sizing: border-box;
+  background-color: #f3ebe0;
+}
+
+.book-page--cover {
+  background-color: #5c3420;
+}
+
+.book-page--paper {
+  background-color: #f3ebe0;
+  box-shadow: inset 0 0 28px rgba(80, 55, 30, 0.08);
+}
+
+.book-stage {
+  touch-action: pan-y;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pageflip-book * {
+    transition-duration: 0.01ms !important;
+  }
+}

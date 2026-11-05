@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
-import { ReaderPlaceholder } from '../components/reader/ReaderPlaceholder'
+import { ReaderWorkspace } from '../components/reader/ReaderWorkspace'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { Spinner } from '../components/ui/Spinner'
 import { useLibrary } from '../context/LibraryContext'
+import { stripPdfExtension } from '../lib/format'
 import { getPdfRecord } from '../services/idb'
 import { touchRecentBook } from '../services/recentBooks'
 
@@ -16,6 +17,7 @@ export function ReaderPage() {
   const [record, setRecord] = useState(null)
 
   const meta = recentBooks.find((book) => book.id === bookId) || null
+  const title = meta?.title || stripPdfExtension(record?.name || meta?.name || '')
 
   useEffect(() => {
     let cancelled = false
@@ -23,6 +25,7 @@ export function ReaderPage() {
     async function load() {
       setStatus('loading')
       setError(null)
+      setRecord(null)
 
       try {
         const pdf = await getPdfRecord(bookId)
@@ -70,13 +73,7 @@ export function ReaderPage() {
       ) : null}
 
       {status === 'ready' ? (
-        <ReaderPlaceholder
-          book={{
-            title: meta?.title,
-            name: record?.name || meta?.name,
-          }}
-          pageCount={meta?.pageCount}
-        />
+        <ReaderWorkspace bookId={bookId} blob={record.blob} title={title} />
       ) : null}
     </AppShell>
   )
