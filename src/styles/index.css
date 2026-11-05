@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink-950: #07080b;
+  --color-ink-900: #0e1016;
+  --color-ink-850: #141722;
+  --color-ink-800: #1b1f2c;
+  --color-ink-700: #2a3144;
+  --color-ink-500: #6b738a;
+  --color-ink-300: #b7bed0;
+  --color-ink-100: #e8ebf3;
+
+  --color-paper: #f3ebe0;
+  --color-paper-dim: #d9cfc0;
+  --color-leather: #8b5a3c;
+  --color-leather-deep: #5c3420;
+  --color-gilt: #c9a66b;
+  --color-gilt-bright: #e4c58a;
+  --color-danger: #e06a5e;
+  --color-success: #6fbf8a;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-family: var(--font-sans);
+    background: var(--color-ink-950);
+    color: var(--color-ink-100);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-gilt) 45%, transparent);
+    color: var(--color-ink-950);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .bg-room {
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(201, 166, 107, 0.12), transparent 55%),
+      radial-gradient(900px 500px at 85% 20%, rgba(139, 90, 60, 0.1), transparent 50%),
+      radial-gradient(700px 400px at 10% 80%, rgba(42, 49, 68, 0.55), transparent 55%),
+      linear-gradient(180deg, var(--color-ink-900) 0%, var(--color-ink-950) 100%);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}

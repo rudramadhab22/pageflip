@@ -1,25 +1,25 @@
 {
   "name": "pageflip",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "lucide-react": "^1.69.0",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-pageflip": "^2.0.3",
+    "react-router-dom": "^7.18.5"
   },
   "devDependencies": {
-    "@types/node": "^24.19.2",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
+    "@tailwindcss/vite": "^4.3.4",
     "@vitejs/plugin-react": "^6.1.2",
-    "oxlint": "^1.90.0",
-    "typescript": "~7.0.2",
+    "tailwindcss": "^4.3.4",
     "vite": "^8.3.6"
   }
 }
