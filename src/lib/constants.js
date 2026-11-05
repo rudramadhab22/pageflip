@@ -30,7 +30,7 @@ export const PAGE_WINDOW_SHIFT_MARGIN = 4
 export const PAGE_IMAGE_CACHE_LIMIT = 28
 
 /** Concurrent PDF.js page renders. */
-export const PAGE_RENDER_CONCURRENCY = 2
+export const PAGE_RENDER_CONCURRENCY = 3
 
 /** Warn in reader UI when a document is this large. */
 export const LARGE_PAGE_COUNT_WARN = 120

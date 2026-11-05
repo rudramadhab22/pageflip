@@ -1,12 +1,21 @@
 import { useCallback } from 'react'
-import { pdfPageToFlipIndex } from '../lib/readerPages'
 
 function getPageFlip(ref) {
+  const handle = ref?.current
+  if (!handle) return null
+
   try {
-    return ref.current?.pageFlip?.() || null
+    if (typeof handle.pageFlip === 'function') {
+      return handle.pageFlip()
+    }
+    // Some builds expose the engine directly.
+    if (typeof handle.flipNext === 'function') {
+      return handle
+    }
   } catch {
     return null
   }
+  return null
 }
 
 export function useFlipControls(flipBookRef, pageCount) {
@@ -14,7 +23,8 @@ export function useFlipControls(flipBookRef, pageCount) {
     const flip = getPageFlip(flipBookRef)
     if (!flip) return
     try {
-      flip.flipNext('top')
+      if (typeof flip.flipNext === 'function') flip.flipNext('top')
+      else flip.turnToNextPage()
     } catch {
       try {
         flip.turnToNextPage()
@@ -28,7 +38,8 @@ export function useFlipControls(flipBookRef, pageCount) {
     const flip = getPageFlip(flipBookRef)
     if (!flip) return
     try {
-      flip.flipPrev('top')
+      if (typeof flip.flipPrev === 'function') flip.flipPrev('top')
+      else flip.turnToPrevPage()
     } catch {
       try {
         flip.turnToPrevPage()
@@ -42,9 +53,9 @@ export function useFlipControls(flipBookRef, pageCount) {
     (pdfPage, { animate = true } = {}) => {
       const flip = getPageFlip(flipBookRef)
       if (!flip) return
-      const index = pdfPageToFlipIndex(pdfPage, pageCount)
+      const index = Math.min(pageCount + 1, Math.max(0, Math.round(pdfPage)))
       try {
-        if (animate) flip.flip(index, 'top')
+        if (animate && typeof flip.flip === 'function') flip.flip(index, 'top')
         else flip.turnToPage(index)
       } catch {
         try {
@@ -63,7 +74,7 @@ export function useFlipControls(flipBookRef, pageCount) {
       if (!flip) return
       const safe = Math.min(pageCount + 1, Math.max(0, index))
       try {
-        if (animate) flip.flip(safe, 'top')
+        if (animate && typeof flip.flip === 'function') flip.flip(safe, 'top')
         else flip.turnToPage(safe)
       } catch {
         try {

@@ -9,6 +9,7 @@ import { useElementSize } from '../../hooks/useElementSize'
 import { useFlipControls } from '../../hooks/useFlipControls'
 import { useFullscreen } from '../../hooks/useFullscreen'
 import { usePdfDocument } from '../../hooks/usePdfDocument'
+import { computeBookPageSize } from '../../lib/pageSize'
 import {
   absolutePageToFlipIndex,
   computePageWindow,
@@ -27,40 +28,7 @@ import { ReaderNotice } from './ReaderNotice'
 import { ReaderToolbar } from './ReaderToolbar'
 import { ReadingProgressBar } from './ReadingProgressBar'
 
-const ZOOM_STEPS = [0.75, 0.9, 1, 1.2, 1.45]
-
-function computePageSize(containerWidth, containerHeight, aspect, zoom, viewMode, expanded) {
-  const safeAspect = aspect > 0 ? aspect : 210 / 297
-  const single = viewMode === 'single'
-  const padX = expanded ? 24 : 32
-  const padY = expanded ? 48 : 28
-  const horizontalBudget = Math.max(280, containerWidth - padX)
-  const verticalBudget = Math.max(320, containerHeight - padY)
-
-  let pageWidth
-  let pageHeight
-
-  if (single) {
-    pageWidth = Math.floor(horizontalBudget * (expanded ? 0.96 : 0.9))
-    pageHeight = Math.floor(pageWidth / safeAspect)
-    if (pageHeight > verticalBudget) {
-      pageHeight = Math.floor(verticalBudget)
-      pageWidth = Math.floor(pageHeight * safeAspect)
-    }
-  } else {
-    pageWidth = Math.floor(horizontalBudget / 2.02)
-    pageHeight = Math.floor(pageWidth / safeAspect)
-    if (pageHeight > verticalBudget) {
-      pageHeight = Math.floor(verticalBudget)
-      pageWidth = Math.floor(pageHeight * safeAspect)
-    }
-  }
-
-  pageWidth = Math.max(180, Math.round(pageWidth * zoom))
-  pageHeight = Math.max(240, Math.round(pageHeight * zoom))
-
-  return { pageWidth, pageHeight }
-}
+const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3]
 
 export function ReaderWorkspace({
   bookId,
@@ -76,9 +44,10 @@ export function ReaderWorkspace({
   const restoredRef = useRef(false)
   const pendingJumpRef = useRef(null)
   const windowMetaRef = useRef(null)
+  const flipIndexRef = useRef(0)
 
   const stageSize = useElementSize(stageRef)
-  const debouncedSize = useDebouncedValue(stageSize, 100)
+  const debouncedStage = useDebouncedValue(stageSize, 220)
   const { pdf, pageCount, aspect, status, error } = usePdfDocument(blob)
   const { enter: enterFs, exit: exitFs } = useFullscreen(rootRef)
   const { bookmarks, toggleBookmark, remove, isBookmarked } = useBookmarks(bookId)
@@ -111,14 +80,11 @@ export function ReaderWorkspace({
   )
 
   useEffect(() => {
-    const onResize = () => {
-      setViewport({ width: window.innerWidth, height: window.innerHeight })
-    }
+    const onResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Lock page scroll while expanded so only the book fills the screen.
   useEffect(() => {
     if (!expanded) return undefined
     const prev = document.body.style.overflow
@@ -129,33 +95,34 @@ export function ReaderWorkspace({
     }
   }, [expanded])
 
-  const sizeSource = expanded
-    ? { width: viewport.width, height: viewport.height }
-    : debouncedSize.width
-      ? debouncedSize
-      : stageSize
+  const layoutWidth = expanded
+    ? viewport.width
+    : debouncedStage.width || stageSize.width || viewport.width * 0.9
+  const layoutHeight = expanded
+    ? viewport.height
+    : debouncedStage.height || stageSize.height || viewport.height * 0.7
 
   const { pageWidth, pageHeight } = useMemo(
     () =>
-      computePageSize(
-        sizeSource.width || 1100,
-        sizeSource.height || 760,
+      computeBookPageSize({
+        containerWidth: layoutWidth,
+        containerHeight: layoutHeight,
         aspect,
         zoom,
         viewMode,
         expanded,
-      ),
-    [sizeSource.width, sizeSource.height, aspect, zoom, viewMode, expanded],
+      }),
+    [layoutWidth, layoutHeight, aspect, zoom, viewMode, expanded],
   )
 
-  const renderProfile = useMemo(() => {
-    const large = pageCount > LARGE_PAGE_COUNT_WARN
-    return {
-      radius: large ? 3 : 5,
-      pixelRatio: Math.min(expanded ? 2.25 : 2, window.devicePixelRatio || 1),
-      quality: large ? 0.88 : 0.94,
-    }
-  }, [pageCount, expanded])
+  const renderProfile = useMemo(
+    () => ({
+      radius: pageCount > LARGE_PAGE_COUNT_WARN ? 3 : 5,
+      pixelRatio: Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1.5 : 1.5),
+      quality: 0.92,
+    }),
+    [pageCount],
+  )
 
   const percent = readingPercent(absolutePage, pageCount)
   const displayLabel =
@@ -180,7 +147,6 @@ export function ReaderWorkspace({
 
   const enterExpand = useCallback(async () => {
     onImmersiveChange?.(true)
-    // Best-effort native fullscreen; CSS expand still works if the API is blocked.
     await enterFs()
   }, [onImmersiveChange, enterFs])
 
@@ -199,6 +165,7 @@ export function ReaderWorkspace({
     clearRenderQueue()
     restoredRef.current = false
     pendingJumpRef.current = null
+    flipIndexRef.current = 0
     setWindowAnchor(1)
     setAbsolutePage(1)
     setFlipIndex(0)
@@ -265,6 +232,7 @@ export function ReaderWorkspace({
   const onFlip = useCallback(
     (event) => {
       const relative = typeof event?.data === 'number' ? event.data : 0
+      flipIndexRef.current = relative
       setFlipIndex(relative)
       syncAbsoluteFromFlip(relative)
     },
@@ -274,6 +242,7 @@ export function ReaderWorkspace({
   const onInit = useCallback(
     (event) => {
       const relative = typeof event?.data?.page === 'number' ? event.data.page : 0
+      flipIndexRef.current = relative
       setFlipIndex(relative)
       if (event?.data?.mode) setOrientation(event.data.mode)
       syncAbsoluteFromFlip(relative)
@@ -286,6 +255,8 @@ export function ReaderWorkspace({
         requestAnimationFrame(() => {
           goToFlipIndex(index, { animate: false })
           setAbsolutePage(pending.page)
+          flipIndexRef.current = index
+          setFlipIndex(index)
         })
         return
       }
@@ -378,11 +349,16 @@ export function ReaderWorkspace({
         ? `Showing pages ${windowMeta.start}–${windowMeta.end} of ${pageCount}.`
         : null
 
+  // Preserve place across intentional remounts (zoom / view / size bucket).
+  const startPage = flipIndexRef.current
+
+  const bookReady = status === 'ready' && pageCount > 0 && pdf && pageWidth > 0 && pageHeight > 0
+
   return (
     <div
       ref={rootRef}
-      className={`reader-workspace relative flex flex-col bg-[#0a0c10] ${
-        expanded ? 'is-expanded' : 'min-h-[calc(100dvh-5.5rem)] bg-transparent'
+      className={`reader-workspace relative flex flex-col ${
+        expanded ? 'is-expanded' : 'min-h-[calc(100dvh-5.5rem)]'
       }`}
     >
       {!expanded ? (
@@ -468,7 +444,7 @@ export function ReaderWorkspace({
           </div>
         ) : null}
 
-        {status === 'ready' && pageCount > 0 && pdf ? (
+        {bookReady ? (
           <PdfReaderProvider
             pdf={pdf}
             pageCount={pageCount}
@@ -486,7 +462,7 @@ export function ReaderWorkspace({
               pageCount={pageCount}
               pageWidth={pageWidth}
               pageHeight={pageHeight}
-              startPage={flipIndex}
+              startPage={startPage}
               windowed={windowMeta.windowed}
               viewMode={viewMode}
               immersive={expanded}
@@ -514,7 +490,7 @@ export function ReaderWorkspace({
 
       {!expanded ? (
         <p className="relative z-[70] mt-3 text-center text-xs text-ink-500 sm:mt-4">
-          Drag to flip · arrows navigate · S single/spread · F expand · Esc exit expand
+          Drag a corner to turn pages · arrows navigate · S single/spread · F expand
         </p>
       ) : null}
     </div>
