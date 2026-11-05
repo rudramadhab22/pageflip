@@ -7,8 +7,10 @@ export function PdfReaderProvider({
   pageCount,
   cssWidth,
   flipIndex,
+  absolutePage,
   title,
   bookId,
+  renderProfile,
   children,
 }) {
   const value = useMemo(
@@ -17,10 +19,12 @@ export function PdfReaderProvider({
       pageCount,
       cssWidth,
       flipIndex,
+      absolutePage,
       title,
       bookId,
+      renderProfile,
     }),
-    [pdf, pageCount, cssWidth, flipIndex, title, bookId],
+    [pdf, pageCount, cssWidth, flipIndex, absolutePage, title, bookId, renderProfile],
   )
 
   return <PdfReaderContext.Provider value={value}>{children}</PdfReaderContext.Provider>

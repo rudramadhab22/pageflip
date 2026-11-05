@@ -2,9 +2,8 @@ import { forwardRef, useEffect, useState } from 'react'
 import { usePdfReader } from '../../context/PdfReaderContext'
 import { getCachedPageImage, setCachedPageImage } from '../../services/pageImageCache'
 import { renderPageToDataUrl } from '../../services/pdfDocument'
+import { enqueueRender } from '../../services/renderQueue'
 import { Spinner } from '../ui/Spinner'
-
-const RENDER_RADIUS = 4
 
 export const HardCoverPage = forwardRef(function HardCoverPage(
   { title, subtitle, side = 'front' },
@@ -48,19 +47,19 @@ export const HardCoverPage = forwardRef(function HardCoverPage(
 })
 
 export const PdfBookPage = forwardRef(function PdfBookPage({ pageNumber }, ref) {
-  const { pdf, cssWidth, flipIndex, bookId } = usePdfReader()
+  const { pdf, cssWidth, absolutePage, bookId, renderProfile } = usePdfReader()
   const [imageUrl, setImageUrl] = useState(() =>
     getCachedPageImage(bookId, pageNumber, cssWidth),
   )
   const [isRendering, setIsRendering] = useState(false)
+  const [failed, setFailed] = useState(false)
 
-  // flipIndex 0 = cover; PDF page N lives at flip index N
-  const near =
-    Math.abs(pageNumber - Math.max(1, flipIndex)) <= RENDER_RADIUS ||
-    Math.abs(pageNumber - (flipIndex + 1)) <= RENDER_RADIUS
+  const radius = renderProfile?.radius ?? 3
+  const near = Math.abs(pageNumber - (absolutePage || 1)) <= radius
 
   useEffect(() => {
     setImageUrl(getCachedPageImage(bookId, pageNumber, cssWidth))
+    setFailed(false)
   }, [bookId, pageNumber, cssWidth])
 
   useEffect(() => {
@@ -72,17 +71,29 @@ export const PdfBookPage = forwardRef(function PdfBookPage({ pageNumber }, ref) 
 
     let cancelled = false
     setIsRendering(true)
+    setFailed(false)
 
-    renderPageToDataUrl(pdf, pageNumber, {
-      cssWidth,
-      pixelRatio: Math.min(2, window.devicePixelRatio || 1),
-    })
+    const priority = Math.abs(pageNumber - (absolutePage || 1)) <= 1
+
+    enqueueRender(
+      () =>
+        renderPageToDataUrl(pdf, pageNumber, {
+          cssWidth,
+          pixelRatio: renderProfile?.pixelRatio ?? 1,
+          quality: renderProfile?.quality ?? 0.88,
+        }),
+      { priority },
+    )
       .then((result) => {
         if (cancelled) return
         setCachedPageImage(bookId, pageNumber, cssWidth, result.dataUrl)
         setImageUrl(result.dataUrl)
       })
-      .catch(() => {})
+      .catch((error) => {
+        if (cancelled) return
+        if (error?.message === 'Render cancelled') return
+        setFailed(true)
+      })
       .finally(() => {
         if (!cancelled) setIsRendering(false)
       })
@@ -90,7 +101,7 @@ export const PdfBookPage = forwardRef(function PdfBookPage({ pageNumber }, ref) 
     return () => {
       cancelled = true
     }
-  }, [pdf, pageNumber, cssWidth, near, bookId])
+  }, [pdf, pageNumber, cssWidth, near, bookId, absolutePage, renderProfile])
 
   return (
     <div
@@ -111,11 +122,11 @@ export const PdfBookPage = forwardRef(function PdfBookPage({ pageNumber }, ref) 
           className="relative h-full w-full object-contain select-none"
         />
       ) : (
-        <div className="relative flex h-full w-full flex-col items-center justify-center gap-3 text-ink-700">
+        <div className="relative flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center text-ink-700">
           {isRendering ? <Spinner label={`Rendering page ${pageNumber}`} /> : null}
           <p className="font-display text-2xl text-ink-700/40">{pageNumber}</p>
           <p className="text-xs tracking-wide text-ink-700/35 uppercase">
-            {isRendering ? 'Printing page…' : 'Paper ready'}
+            {failed ? 'Couldn’t print this page' : isRendering ? 'Printing page…' : 'Paper ready'}
           </p>
         </div>
       )}

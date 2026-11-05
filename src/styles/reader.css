@@ -30,6 +30,26 @@
   touch-action: pan-y;
 }
 
+.reader-workspace:fullscreen,
+.reader-workspace:-webkit-full-screen {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+  background: #07080b;
+}
+
+@media (max-width: 719px) {
+  .book-stage {
+    width: 100%;
+  }
+
+  .pageflip-book {
+    max-width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pageflip-book * {
     transition-duration: 0.01ms !important;
