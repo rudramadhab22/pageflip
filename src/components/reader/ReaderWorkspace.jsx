@@ -126,14 +126,18 @@ export function ReaderWorkspace({
     [layoutWidth, layoutHeight, pageWidth, pageHeight, viewMode, expanded],
   )
 
-  const renderProfile = useMemo(
-    () => ({
+  // Over-render for CSS fitScale so glyphs stay sharp when the book is enlarged.
+  const renderProfile = useMemo(() => {
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+    const upscale = Math.max(1, Math.round(fitScale * 20) / 20)
+    return {
       radius: pageCount > LARGE_PAGE_COUNT_WARN ? 3 : 5,
-      pixelRatio: Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1.5 : 1.5),
-      quality: 0.92,
-    }),
-    [pageCount],
-  )
+      // Slight extra headroom (1.15) beyond screen DPR × display scale.
+      pixelRatio: Math.min(4, Math.max(2, dpr * upscale * 1.15)),
+      quality: 0.98,
+      format: 'png',
+    }
+  }, [pageCount, fitScale])
 
   const percent = readingPercent(absolutePage, pageCount)
   const displayLabel =

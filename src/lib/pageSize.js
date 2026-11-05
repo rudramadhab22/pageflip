@@ -16,13 +16,13 @@ export function computeBookPageSize({
   const safeAspect = aspect > 0 ? aspect : 210 / 297
   const single = viewMode === 'single'
 
-  // Comfortable “print” size; zoom adjusts this, expand does not.
-  let pageWidth = single ? 420 : 380
+  // Larger intrinsic page → less CSS upscale → clearer text.
+  let pageWidth = single ? 560 : 520
   pageWidth = Math.round(pageWidth * zoom)
   let pageHeight = Math.round(pageWidth / safeAspect)
 
-  pageWidth = snapSize(Math.max(220, pageWidth))
-  pageHeight = snapSize(Math.max(300, pageHeight))
+  pageWidth = snapSize(Math.max(280, pageWidth))
+  pageHeight = snapSize(Math.max(360, pageHeight))
 
   return { pageWidth, pageHeight }
 }

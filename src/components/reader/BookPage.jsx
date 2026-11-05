@@ -33,8 +33,11 @@ export function HardCoverContent({ title, subtitle, side = 'front' }) {
 export function PdfPageContent({ pageNumber }) {
   const { pdf, cssWidth, absolutePage, bookId, renderProfile } = usePdfReader()
   const imgRef = useRef(null)
+  const pixelRatio = renderProfile?.pixelRatio ?? 2
+  const quality = renderProfile?.quality ?? 0.98
+  const format = renderProfile?.format ?? 'png'
   const [imageUrl, setImageUrl] = useState(() =>
-    getCachedPageImage(bookId, pageNumber, cssWidth),
+    getCachedPageImage(bookId, pageNumber, cssWidth, pixelRatio),
   )
   const [failed, setFailed] = useState(false)
 
@@ -42,19 +45,19 @@ export function PdfPageContent({ pageNumber }) {
   const near = Math.abs(pageNumber - (absolutePage || 1)) <= radius || pageNumber <= 6
 
   useEffect(() => {
-    // Keep the previous bitmap visible while a new width is rendering (prevents light blink).
-    const cached = getCachedPageImage(bookId, pageNumber, cssWidth)
+    // Keep the previous bitmap visible while a sharper pass renders (prevents light blink).
+    const cached = getCachedPageImage(bookId, pageNumber, cssWidth, pixelRatio)
     if (cached) {
       setImageUrl(cached)
       if (imgRef.current) imgRef.current.src = cached
     }
     setFailed(false)
-  }, [bookId, pageNumber, cssWidth])
+  }, [bookId, pageNumber, cssWidth, pixelRatio])
 
   useEffect(() => {
     if (!pdf || !cssWidth || !near) return undefined
 
-    const cached = getCachedPageImage(bookId, pageNumber, cssWidth)
+    const cached = getCachedPageImage(bookId, pageNumber, cssWidth, pixelRatio)
     if (cached) {
       setImageUrl(cached)
       if (imgRef.current) imgRef.current.src = cached
@@ -68,14 +71,15 @@ export function PdfPageContent({ pageNumber }) {
       () =>
         renderPageToDataUrl(pdf, pageNumber, {
           cssWidth,
-          pixelRatio: renderProfile?.pixelRatio ?? 1.5,
-          quality: renderProfile?.quality ?? 0.92,
+          pixelRatio,
+          quality,
+          format,
         }),
       { priority: distance <= 1 },
     )
       .then((result) => {
         if (cancelled) return
-        setCachedPageImage(bookId, pageNumber, cssWidth, result.dataUrl)
+        setCachedPageImage(bookId, pageNumber, cssWidth, result.dataUrl, pixelRatio)
         setImageUrl(result.dataUrl)
         if (imgRef.current) imgRef.current.src = result.dataUrl
       })
@@ -87,7 +91,7 @@ export function PdfPageContent({ pageNumber }) {
     return () => {
       cancelled = true
     }
-  }, [pdf, pageNumber, cssWidth, near, bookId, absolutePage, renderProfile])
+  }, [pdf, pageNumber, cssWidth, near, bookId, absolutePage, pixelRatio, quality, format])
 
   return (
     <>

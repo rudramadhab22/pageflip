@@ -89,25 +89,36 @@ export async function getDominantPageAspect(pdf) {
   return best || { width: 595, height: 842, aspect: 210 / 297, landscape: false }
 }
 
+const MAX_CANVAS_EDGE = 4096
+
 /**
- * Render one PDF page to a JPEG data URL for flip-book pages.
+ * Render one PDF page to a crisp data URL for flip-book pages.
+ * PNG keeps text edges sharp (JPEG softens glyphs when CSS-scaled).
  */
 export async function renderPageToDataUrl(
   pdf,
   pageNumber,
-  { cssWidth, pixelRatio = 1, quality = 0.88 } = {},
+  { cssWidth, pixelRatio = 1, quality = 0.98, format = 'png' } = {},
 ) {
   const page = await pdf.getPage(pageNumber)
   const base = page.getViewport({ scale: 1 })
   const targetWidth = cssWidth || base.width
-  const scale = (targetWidth / base.width) * pixelRatio
+
+  // Cap canvas size so high-DPI + expand still fits memory budgets.
+  let effectivePr = Math.max(1, pixelRatio)
+  const projected = targetWidth * effectivePr
+  if (projected > MAX_CANVAS_EDGE) {
+    effectivePr = MAX_CANVAS_EDGE / targetWidth
+  }
+
+  const scale = (targetWidth / base.width) * effectivePr
   const viewport = page.getViewport({ scale })
 
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.floor(viewport.width))
   canvas.height = Math.max(1, Math.floor(viewport.height))
 
-  const context = canvas.getContext('2d', { alpha: false })
+  const context = canvas.getContext('2d', { alpha: false, desynchronized: true })
   if (!context) {
     throw new Error('Canvas unavailable in this browser.')
   }
@@ -118,7 +129,7 @@ export async function renderPageToDataUrl(
   const renderTask = page.render({
     canvasContext: context,
     viewport,
-    intent: 'display',
+    intent: 'print',
   })
 
   try {
@@ -128,13 +139,15 @@ export async function renderPageToDataUrl(
     throw error
   }
 
-  const dataUrl = canvas.toDataURL('image/jpeg', quality)
+  const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png'
+  const dataUrl =
+    mime === 'image/jpeg' ? canvas.toDataURL(mime, quality) : canvas.toDataURL(mime)
   if (typeof page.cleanup === 'function') page.cleanup()
 
   return {
     dataUrl,
-    width: canvas.width / pixelRatio,
-    height: canvas.height / pixelRatio,
+    width: canvas.width / effectivePr,
+    height: canvas.height / effectivePr,
     pageAspect: base.width / base.height,
   }
 }
