@@ -18,17 +18,20 @@ npm install
 npm run dev
 ```
 
-## Architecture (Phase 1)
+## Architecture
 
 ```
 src/
   pages/           HomePage, ReaderPage
-  components/      home, layout, reader, ui
-  context/         LibraryProvider
-  hooks/           usePdfUpload
-  services/        IndexedDB PDFs, recent books, progress, bookmarks
-  lib/             constants, formatters, PDF metadata probe
-  styles/          Tailwind theme tokens
+  components/
+    home/          Upload + recent shelf
+    reader/        BookStage, BookPage, ReaderWorkspace
+    layout/ ui/
+  context/         LibraryProvider, PdfReaderProvider
+  hooks/           usePdfUpload, usePdfDocument, useElementSize
+  services/        IndexedDB, recent books, progress, bookmarks, pdf render, page cache
+  lib/             constants, formatters, PDF worker
+  styles/          Theme + reader hardcover CSS
 ```
 
 ## License
