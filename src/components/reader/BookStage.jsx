@@ -13,6 +13,7 @@ export function BookStage({
   pageCount,
   pageWidth,
   pageHeight,
+  startPage = 0,
   flipBookRef,
   onFlip,
   onInit,
@@ -81,6 +82,7 @@ export function BookStage({
             maxWidth={pageWidth}
             minHeight={Math.min(360, pageHeight)}
             maxHeight={pageHeight}
+            startPage={startPage}
             drawShadow
             flippingTime={900}
             usePortrait
@@ -88,6 +90,7 @@ export function BookStage({
             autoSize={false}
             maxShadowOpacity={0.55}
             showCover
+            showPageCorners
             mobileScrollSupport
             swipeDistance={24}
             clickEventForward={false}
