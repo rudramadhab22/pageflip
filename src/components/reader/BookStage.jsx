@@ -47,7 +47,7 @@ export function BookStage({
       <div
         className="relative mx-auto"
         style={{
-          width: Math.min(shellWidth, immersive ? 1600 : 1280),
+          width: shellWidth,
           maxWidth: '100%',
         }}
       >

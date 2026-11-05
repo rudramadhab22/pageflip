@@ -29,28 +29,26 @@ import { ReadingProgressBar } from './ReadingProgressBar'
 
 const ZOOM_STEPS = [0.75, 0.9, 1, 1.2, 1.45]
 
-function computePageSize(containerWidth, containerHeight, aspect, zoom, viewMode, immersive) {
+function computePageSize(containerWidth, containerHeight, aspect, zoom, viewMode, expanded) {
   const safeAspect = aspect > 0 ? aspect : 210 / 297
   const single = viewMode === 'single'
-  const padX = immersive ? 16 : 32
-  const padY = immersive ? 16 : 28
+  const padX = expanded ? 24 : 32
+  const padY = expanded ? 48 : 28
   const horizontalBudget = Math.max(280, containerWidth - padX)
-  const verticalBudget = Math.max(340, containerHeight - padY)
+  const verticalBudget = Math.max(320, containerHeight - padY)
 
   let pageWidth
   let pageHeight
 
   if (single) {
-    // One readable leaf — use most of the viewport.
-    pageWidth = Math.min(immersive ? 720 : 560, Math.floor(horizontalBudget * 0.92))
+    pageWidth = Math.floor(horizontalBudget * (expanded ? 0.96 : 0.9))
     pageHeight = Math.floor(pageWidth / safeAspect)
     if (pageHeight > verticalBudget) {
       pageHeight = Math.floor(verticalBudget)
       pageWidth = Math.floor(pageHeight * safeAspect)
     }
   } else {
-    // Open spread — maximize while keeping both pages on screen.
-    pageWidth = Math.min(immersive ? 640 : 520, Math.floor(horizontalBudget / 2.02))
+    pageWidth = Math.floor(horizontalBudget / 2.02)
     pageHeight = Math.floor(pageWidth / safeAspect)
     if (pageHeight > verticalBudget) {
       pageHeight = Math.floor(verticalBudget)
@@ -80,10 +78,9 @@ export function ReaderWorkspace({
   const windowMetaRef = useRef(null)
 
   const stageSize = useElementSize(stageRef)
-  const debouncedSize = useDebouncedValue(stageSize, 140)
+  const debouncedSize = useDebouncedValue(stageSize, 100)
   const { pdf, pageCount, aspect, status, error } = usePdfDocument(blob)
-  const { isFullscreen, toggle: toggleBrowserFullscreen, exit: exitBrowserFullscreen } =
-    useFullscreen(rootRef)
+  const { enter: enterFs, exit: exitFs } = useFullscreen(rootRef)
   const { bookmarks, toggleBookmark, remove, isBookmarked } = useBookmarks(bookId)
 
   const [flipIndex, setFlipIndex] = useState(0)
@@ -93,10 +90,14 @@ export function ReaderWorkspace({
   const [zoomIndex, setZoomIndex] = useState(2)
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const [viewMode, setViewMode] = useState('spread')
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800,
+  }))
 
+  const expanded = Boolean(immersive)
   const zoom = ZOOM_STEPS[zoomIndex]
   const zoomLabel = `${Math.round(zoom * 100)}%`
-  const expanded = immersive || isFullscreen
 
   const windowMeta = useMemo(
     () => computePageWindow(pageCount || 0, windowAnchor),
@@ -109,7 +110,31 @@ export function ReaderWorkspace({
     windowMeta.pages.length,
   )
 
-  const sizeSource = debouncedSize.width ? debouncedSize : stageSize
+  useEffect(() => {
+    const onResize = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight })
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Lock page scroll while expanded so only the book fills the screen.
+  useEffect(() => {
+    if (!expanded) return undefined
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    setViewport({ width: window.innerWidth, height: window.innerHeight })
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [expanded])
+
+  const sizeSource = expanded
+    ? { width: viewport.width, height: viewport.height }
+    : debouncedSize.width
+      ? debouncedSize
+      : stageSize
+
   const { pageWidth, pageHeight } = useMemo(
     () =>
       computePageSize(
@@ -148,23 +173,26 @@ export function ReaderWorkspace({
   const canNext = !(flipIndex >= windowMeta.pages.length + 1 && windowMeta.end >= pageCount)
   const bookmarked = isBookmarked(absolutePage)
 
-  const goLibrary = useCallback(() => {
-    if (document.fullscreenElement) {
-      exitBrowserFullscreen()
-    }
+  const exitExpand = useCallback(async () => {
     onImmersiveChange?.(false)
-    navigate('/')
-  }, [navigate, exitBrowserFullscreen, onImmersiveChange])
+    await exitFs()
+  }, [onImmersiveChange, exitFs])
+
+  const enterExpand = useCallback(async () => {
+    onImmersiveChange?.(true)
+    // Best-effort native fullscreen; CSS expand still works if the API is blocked.
+    await enterFs()
+  }, [onImmersiveChange, enterFs])
 
   const toggleExpand = useCallback(async () => {
-    if (expanded) {
-      onImmersiveChange?.(false)
-      if (document.fullscreenElement) await exitBrowserFullscreen()
-      return
-    }
-    onImmersiveChange?.(true)
-    await toggleBrowserFullscreen()
-  }, [expanded, onImmersiveChange, exitBrowserFullscreen, toggleBrowserFullscreen])
+    if (expanded) await exitExpand()
+    else await enterExpand()
+  }, [expanded, exitExpand, enterExpand])
+
+  const goLibrary = useCallback(async () => {
+    await exitExpand()
+    navigate('/')
+  }, [navigate, exitExpand])
 
   useEffect(() => {
     clearPageImageCache(bookId)
@@ -195,14 +223,6 @@ export function ReaderWorkspace({
       setWindowAnchor(absolutePage)
     }
   }, [absolutePage, pageCount, windowMeta])
-
-  useEffect(() => {
-    const onFs = () => {
-      if (!document.fullscreenElement) onImmersiveChange?.(false)
-    }
-    document.addEventListener('fullscreenchange', onFs)
-    return () => document.removeEventListener('fullscreenchange', onFs)
-  }, [onImmersiveChange])
 
   const syncAbsoluteFromFlip = useCallback(
     (relativeIndex) => {
@@ -328,7 +348,7 @@ export function ReaderWorkspace({
         onPrev()
       } else if (event.key === 'Escape' && expanded) {
         event.preventDefault()
-        toggleExpand()
+        exitExpand()
       } else if (event.key === 'f' || event.key === 'F') {
         event.preventDefault()
         toggleExpand()
@@ -349,7 +369,7 @@ export function ReaderWorkspace({
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onNext, onPrev, toggleExpand, onToggleBookmark, onZoomIn, onZoomOut, expanded])
+  }, [onNext, onPrev, toggleExpand, exitExpand, onToggleBookmark, onZoomIn, onZoomOut, expanded])
 
   const largeNotice =
     !expanded && pageCount >= LARGE_PAGE_COUNT_WARN
@@ -361,10 +381,8 @@ export function ReaderWorkspace({
   return (
     <div
       ref={rootRef}
-      className={`reader-workspace relative flex flex-col ${
-        expanded
-          ? 'fixed inset-0 z-[90] min-h-dvh bg-[#0a0c10]'
-          : 'min-h-[calc(100dvh-5.5rem)]'
+      className={`reader-workspace relative flex flex-col bg-[#0a0c10] ${
+        expanded ? 'is-expanded' : 'min-h-[calc(100dvh-5.5rem)] bg-transparent'
       }`}
     >
       {!expanded ? (
@@ -421,8 +439,8 @@ export function ReaderWorkspace({
       ) : (
         <button
           type="button"
-          onClick={toggleExpand}
-          className="absolute top-4 right-4 z-[95] inline-flex items-center gap-2 rounded-xl border border-white/10 bg-ink-900/80 px-3 py-2 text-sm text-ink-100 backdrop-blur-md transition hover:border-gilt/40 hover:text-gilt-bright"
+          onClick={exitExpand}
+          className="absolute top-4 right-4 z-[120] inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/55 px-3 py-2 text-sm text-ink-100 backdrop-blur-md transition hover:border-gilt/40 hover:text-gilt-bright"
         >
           <Minimize2 className="size-4" />
           Exit
@@ -433,7 +451,7 @@ export function ReaderWorkspace({
         ref={stageRef}
         className={`relative z-10 flex flex-1 items-center justify-center overflow-hidden ${
           expanded
-            ? 'min-h-0 bg-[#0a0c10] px-2 py-2 sm:px-4 sm:py-4'
+            ? 'h-full min-h-0 w-full px-3 py-3 sm:px-5 sm:py-5'
             : 'min-h-[58dvh] rounded-[1.25rem] border border-white/6 bg-ink-950/40 px-2 py-4 sm:min-h-[62dvh] sm:rounded-[1.5rem] sm:px-6 sm:py-6'
         }`}
       >

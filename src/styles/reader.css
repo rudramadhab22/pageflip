@@ -13,7 +13,6 @@
 }
 
 .pageflip-book--single .stf__parent {
-  /* Keep the interactive hit area from covering Library / chrome */
   max-width: 100%;
 }
 
@@ -46,12 +45,25 @@
   isolation: isolate;
 }
 
-.reader-workspace:fullscreen,
-.reader-workspace:-webkit-full-screen {
+/* Reliable expand: CSS fullscreen shell (works even if Fullscreen API is blocked) */
+.reader-workspace.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #0a0c10;
+}
+
+.reader-workspace.is-expanded:fullscreen,
+.reader-workspace.is-expanded:-webkit-full-screen {
   width: 100%;
   height: 100%;
-  overflow: hidden;
-  padding: 0;
+  max-height: none;
   background: #0a0c10;
 }
 
