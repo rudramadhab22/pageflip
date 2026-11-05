@@ -25,14 +25,21 @@ src/
   pages/           HomePage, ReaderPage
   components/
     home/          Upload + recent shelf
-    reader/        BookStage, BookPage, ReaderWorkspace
+    reader/        BookStage, BookPage, ReaderWorkspace, Toolbar, Bookmarks, Progress
     layout/ ui/
   context/         LibraryProvider, PdfReaderProvider
-  hooks/           usePdfUpload, usePdfDocument, useElementSize
+  hooks/           upload, pdf document, flip controls, bookmarks, fullscreen, size
   services/        IndexedDB, recent books, progress, bookmarks, pdf render, page cache
-  lib/             constants, formatters, PDF worker
+  lib/             constants, formatters, reader page helpers, PDF worker
   styles/          Theme + reader hardcover CSS
 ```
+
+## Reader shortcuts
+
+- `←` / `→` — previous / next page
+- `B` — toggle bookmark
+- `F` — fullscreen
+- `+` / `-` — zoom
 
 ## License
 
